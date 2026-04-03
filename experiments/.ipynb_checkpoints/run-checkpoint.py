@@ -116,9 +116,13 @@ def get_complexities(model_name, input_dim, n_samples):
         medium = list(range(critical_hidden + 10, critical_hidden * 2, 2))
         large = list(range(critical_hidden * 2, 400, 20))
         """
+        """
+        With critical_hidden=42, this tops out at h=390, which is params=390*12+1 = 4681
+        This is where the plot cuts off and the curve is still descending.
+        """
         small = list(range(1, critical_hidden + 20))
         medium = list(range(critical_hidden, critical_hidden * 2, 1))
-        large = list(range(critical_hidden * 2, 400, 10))
+        large = list(range(critical_hidden * 2, 400, 10))    
 
         return sorted(set(small + medium + large))
         

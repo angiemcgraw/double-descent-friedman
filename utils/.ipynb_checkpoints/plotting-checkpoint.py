@@ -79,13 +79,15 @@ def plot_double_descent(complexities, train_errors, test_errors,
     plt.yscale('log')
     plt.title(f"Double Descent: {model_name}")
     plt.xlabel(xlabel)
-    plt.ylabel("MSE (log scale)")
+    #plt.ylabel("MSE (log scale)"
+    plt.ylabel("MSE")
     plt.grid(True, which='both', alpha=0.3)
     plt.legend()
     plt.tight_layout()
     
     if filename is None:
-        filename = f"{model_name}_double_descent.png"
+        #filename = f"{model_name}_double_descent.png"
+        filename = f"{model_name}_double_descent_no_log.png"
         
     save_path = os.path.join(FIGURE_DIR, filename)
     plt.savefig(save_path, dpi=300)
