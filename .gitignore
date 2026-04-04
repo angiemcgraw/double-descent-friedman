@@ -8,3 +8,4 @@ double_descent_env/
 
 # Mac
 .DS_Store
+.ipynb_checkpoints/
