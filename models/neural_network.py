@@ -70,13 +70,22 @@ class NeuralNetwork(BaseModel):
 
         self.loss_fn = nn.MSELoss()
 
+        # Adam optimizer
+        self.optimizer = torch.optim.Adam(
+            self.model.parameters(),
+            lr=self.lr
+        )
+
+        """
         # SGD with momentum
+        # Used in: /sgd_with_momentum_label_corruption runs (noise = 0.1, 15% label corruption)
         self.optimizer = torch.optim.SGD(
             self.model.parameters(),
             lr=self.lr,
             momentum=0.9,
             weight_decay=0.0     # no explicit regularization
         )
+        """
 
         """
         # Cosine annealing - smoothly reduces lr to near zero

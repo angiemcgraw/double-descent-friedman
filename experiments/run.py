@@ -60,24 +60,22 @@ def set_seed(seed):
 
 def get_model(model_name, complexity, input_dim, n_samples):
     if model_name == "nn":
-        """
-        critical_hidden = max(1, n_samples // (input_dim + 2))
-
-        if complexity < 2 * critical_hidden:
-            lr = 0.05
-        else: 
-            lr = 0.01
+        # Adam lr
         return NeuralNetwork(
-            input_dim=input_dim, 
-            complexity=complexity, 
-            epochs=10000,   
-            lr=lr)
+            input_dim=input_dim,
+            complexity=complexity,
+            epochs=10000,
+            lr=1e-3
+        )
         """
+        # SGD lr
+        # Used in: /sgd_with_momentum_label_corruption runs
         return NeuralNetwork(
             input_dim=input_dim, 
             complexity=complexity, 
             epochs=10000,   
             lr=0.01)
+        """
     #elif model_name == "polynomial:
         #return PolynomialRegression(degree=complexity)
     #elif model_name == "randomfeature":
@@ -200,16 +198,22 @@ def run_seed(seed, complexity, X_train, y_train, X_test, y_test, model_name):
     """
     set_seed(seed)
 
-    # NN-specific label corruption
+    """
+    # No label corruption - Adam run, relies on dataset noise only
     label_corruption = 0.0
     y_train_noisy = y_train.copy()
+    """
+
+    # NN-specific label corruption (Nakkiran et al.)
+    label_corruption = 0.0
+    y_train_noisy = y_train.copy()
+
     if model_name == "nn":
         # Corrupt 15% of labels randomly (helps with producing the interpolation peak)
         n = len(y_train)
         label_corruption = 0.15
         corrupt_idx = np.random.choice(n, size=int(label_corruption * n), replace=False)
-        y_train_noisy[corrupt_idx] = np.random.choice(y_train, size=len(corrupt_idx))
-    
+        y_train_noisy[corrupt_idx] = np.random.choice(y_train, size=len(corrupt_idx))    
 
     model = get_model(model_name, complexity, X_train.shape[1], X_train.shape[0])
     model.fit(X_train, y_train_noisy)
@@ -245,37 +249,7 @@ def main():
     # Load dataset
     X_train, X_test, y_train, y_test = load_dataset(dataset_name)
 
-    # SANITY CHECK
-    # ---------------------------------------------------------------
-    """
-    noise = np.random.randn(len(y_train)) * 0.3
-    y_noisy = y_train + noise
-    model = NeuralNetwork(input_dim=X_train.shape[1], complexity=42, epochs=10000, lr=0.1)
-    model.fit(X_train, y_noisy)
-    # Must print train_loss < 0.01 before proceeding
-    exit()
-    """
-    """
-    y_noisy = y_train.copy()
-    n = len(y_noisy)
-    idx = np.random.choice(n, int(0.15 * n), replace=False)
-    y_noisy[idx] = np.random.choice(y_train, size=len(idx))
-    #model = NeuralNetwork(input_dim=X_train.shape[1], complexity=42, epochs=10000, lr=0.05)
-    model = NeuralNetwork(input_dim=X_train.shape[1], complexity=200, epochs=10000, lr=0.01)
-    model.fit(X_train, y_noisy)
-    # Must print train_loss < 0.01 before proceeding
-    exit()
-    """
-    # ---------------------------------------------------------------
-
-    #complexities = get_complexities(model_name)
     complexities = get_complexities(model_name, X_train.shape[1], X_train.shape[0])
-
-    """
-    train_errors = []
-    test_errors = []
-    param_counts = []
-    """
 
     # Prepare summary dictionary
     summary_data = {k: [] for k in [
@@ -333,23 +307,9 @@ def main():
                 row[k] = aggregated[k][run_idx]
             long_data.append(row)
 
-        """
-        train_errors.append(np.mean([r[0] for r in results]))
-        test_errors.append(np.mean([r[1] for r in results]))
-        param_counts.append(np.nanmean([r[2] for r in results]))     # NN params or NaN
-
-        train_std = np.std([r[0] for r in results])
-        test_std = np.std([r[1] for r in results])
-        param_std = np.nanstd([r[2] for r in results])
-        """
-
     # ---------------------------------------------------------------
 
     # Check
-    """
-    print(f"Min train error: {min(train_errors):.4f}")     # we expect this to be close to 0 for large models
-    print(f"Min test error: {min(test_errors):.4f}")
-    """
     print(f"Min train error: {min(summary_data['train_mse_mean']):.4f}")     # we expect this to be close to 0 for large models
     print(f"Min test error: {min(summary_data['test_mse_mean']):.4f}")
 
@@ -375,23 +335,6 @@ def main():
         filename=os.path.join(model_name, f"{dataset_name}_double_descent.png"),
         threshold=X_train.shape[0]
     )
-    
-    """
-    # ---------------------------------------------------------------
-    # Plotting
-    # If not close to 0 for large models, we are underfitting.
-    # Plot double descent curves
-    plot_double_descent(
-        complexities,
-        train_errors,
-        test_errors,
-        param_counts = param_counts,
-        model_name = f"{model_name}_{dataset_name}",
-        filename=os.path.join(model_name, f"{dataset_name}_double_descent.png"),
-        threshold=X_train.shape[0]
-    )
-    # ---------------------------------------------------------------
-    """
 
 if __name__ == "__main__":
     main()
