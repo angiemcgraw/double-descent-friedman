@@ -1,8 +1,23 @@
 """
-Usage:
+Reads from a pre-generated metrics_summary.csv (the run.py will produce this).
+Produces the double descent plot. Options:
+- Default: log-scale y-axis
+- Linear-scale y-axis
+- Linear-scale y-axis, Annotated
+- Has conditional arguments for the NN, i.e. the Adam vs SGD
+
+Usage (from project root):
 (Default: log) python3 -m utils.plot_from_csv --model nn --dataset friedman1
 python3 -m utils.plot_from_csv --model nn --dataset friedman1 --linear
 python3 -m utils.plot_from_csv --model nn --dataset friedman1 --linear --annotated
+python3 -m utils.plot_from_csv --model nn --dataset friedman1 --linear --condition adam_corruption0.15
+
+Output: 
+    {csv_dir}/{dataset}_double_descent_{log|linear}.png
+    {csv_dir}/{dataset}_double_descent_{log|linear}_annotated.png (if --annotated).
+
+Angie McGraw
+Last updated: April 5th, 2026
 """
 import argparse
 import pandas as pd
@@ -13,11 +28,19 @@ import matplotlib.pyplot as plt
 plt.style.use('seaborn-v0_8-white')
 
 def smooth(y, window=11):
+    """
+    Simple moving average.
+    "same" so that the output length matches the input length.
+    """
     return np.convolve(y, np.ones(window)/window, mode='same')
 
 def find_threshold(x, train_errors, eps=0.01):
     """
-    Interpolation threshold: first param count where train error drops below eps.
+    Estimate the interpolation threshold: first param count where train error
+    drops below eps.
+
+    eps is epsilon - used as a floor to prevent numerical issues. Small 
+    positive number. Prevention of log(0) situation.
     """
     below = np.where(train_errors < eps)[0]
     if len(below) == 0:
@@ -25,6 +48,24 @@ def find_threshold(x, train_errors, eps=0.01):
     return x[below[0]]
 
 def _load_and_prepare(csv_path, log_scale):
+    """
+    Loads a metrics_summary CSV and return smoothed train/test curves.
+
+    Handles both summary CSVs (params_mean, train_mse_mean) and per-run
+    CSVs (params, train_mse) by checking column names.
+
+    What it does:
+    - Sorting by parameter count.
+    - Log floor (if log-scale) to avoid log(0) situation.
+    - Moving average smoothing (window=11)
+    - Edge trim (trim=5) to remove boundary artifacts from convolution.
+
+    Returns:
+        x: smoothed and trimmed parameter counts
+        train_smooth: smoothed train MSE
+        test_smooth: smoothed test MSE
+        test_std_smooth: smoothed test MSE std (or None, if unavailable)
+    """
     df = pd.read_csv(csv_path)
 
     train_col = "train_mse_mean" if "train_mse_mean" in df.columns else "train_mse"
@@ -57,6 +98,10 @@ def _load_and_prepare(csv_path, log_scale):
     return x, train_smooth, test_smooth, test_std_smooth
 
 def plot_from_csv(csv_path, model_name, log_scale=True):
+    """
+    Output is a double descent plot from a metrics_summary.csv.
+    Saves to the same direcotry as the .csv.
+    """
     x, train_smooth, test_smooth, _ = _load_and_prepare(csv_path, log_scale)
     
     plt.figure(figsize=(8, 4))
@@ -85,6 +130,21 @@ def plot_from_csv(csv_path, model_name, log_scale=True):
     print(f"[INFO] Saved to {out_path}.")
 
 def plot_from_csv_annotated(csv_path, model_name, log_scale=True):
+    """
+    Outputs an annotated double descent plot from a metrics_summary.csv.
+
+    Annotations (inspired by Nakkiran et al. 2019):
+    - Critical regime shading (orange) between interpolation threshold and peak.
+    - Dashed interpolation threshold line with an arrow pointing to it.
+    - Classical regime, modern regime text labels.
+    - Shaded +/-1 std band around the test error (if the std is available).
+
+    find_threshold() to detect the interpolation threshold - uses train error.
+
+    Annotations are drawn in situations where train error reaches near-zero.
+
+    Saves to the same directory as the CSV.
+    """
     x, train_smooth, test_smooth, test_std_smooth = _load_and_prepare(csv_path, log_scale)
     threshold = find_threshold(x, train_smooth)
 

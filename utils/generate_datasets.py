@@ -1,4 +1,7 @@
 """
+Same as the generate_datasets.ipynb.
+To generate the .npz files, generate_datasets.ipynb, not generate_datasets.py.
+
 Angie McGraw
 Last Updated: March 28th, 2026
 """

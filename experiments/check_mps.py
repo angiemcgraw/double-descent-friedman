@@ -1,3 +1,8 @@
+"""
+Angie McGraw
+Last updated: April 3rd, 2026
+"""
+
 import torch
 
 """

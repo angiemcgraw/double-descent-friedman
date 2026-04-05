@@ -1,6 +1,10 @@
 """
 Shared plotting. 
 
+Produces log-scale plots after each run. 
+
+plot_from_csv.py for customizable plotting.
+
 Angie McGraw
 Last updated: March 31st, 2026
 """
@@ -14,6 +18,10 @@ FIGURE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "figures")
 os.makedirs(FIGURE_DIR, exist_ok=True)
 
 def smooth(y, window=5):
+    """
+    Simple moving average.
+    "same" is used so that the output length is the same as the input length.
+    """
     return np.convolve(y, np.ones(window)/window, mode='same')
 
 def plot_double_descent(complexities, train_errors, test_errors, 

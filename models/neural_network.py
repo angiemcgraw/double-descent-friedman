@@ -6,7 +6,7 @@ Last updated: March 31st, 2026
 - Training loop monitors MSE
 - Adjustable epochs and learning rate
 
-Features
+Features:
 1. Single hidden layer MLP
 - Literature often uses simple MLPs to illustrate the interpolation peak.
 - Single-layer keeps the network comparable to the other models, especially in terms

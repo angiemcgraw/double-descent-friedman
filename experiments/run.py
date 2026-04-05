@@ -4,30 +4,42 @@ Main entry point for all models and datasets.
 - Averages results across runs, since double descent is a statistical phenomenon.
 - Produces smooth double descent curves.
 
+Operations: 
+1. Sweep over complexity (e.g. hidden units for neural networks) values (this is
+the looping variable).
+2. For each complexity, we train the model.
+3. After traiing, we call count_params to get the actual parameter count.
+4. The parameter count is stored in params_mean in the CSV.
+5. plot_from_csv reads params_mean and uses it as the x-axis
+
 Usage (from the base directory: /double-descent-friedman)
 python3 -m experiments.run --model nn --dataset friedman1
+python3 -m experiments.run --model nn --dataset friedman1 --optimizer adam --corruption 0.15
 python3 -m experiments.run --model polynomial --dataset friedman1
 
 Models supported:
-1. Polynomial Regression
-2. Random Feature Regression
-3. Kernel Ridge Regresion
-4. Neural Network
+1. Polynomial Regression (polynomial)
+2. Random Feature Regression (randomfeature)
+3. Kernel Ridge Regresion (kernelridge)
+4. Neural Network (nn)
 
-CSV includes:
-- Mean and std for train/test MSE and param counts
-- Hyperparameters for each model
-- NN-specific label corruption
-- Long-format per-run CSV
+NN-specific CLI arguments:
+--optimizer: "adam" (default) or "sgd"
+--corruption: label corruption rate (default 0.15, set 0.0 for no corruption)
+These arguments are ignored for the other models in this study.
 
-Main loop:
-- Aggregates per-run results into aggregated.
-- Computes summary statistics for mean/std.
-- Stores long-format per-run CSV (long_data).
-- Stores summary CSV (summary_data).
+Output CSVs:
+{dataset}_metrics_summary.csv: mean/std of train/test MSE and param counts
+{dataset}_metrics_per_run.csv: long-format per-run results
+
+Output directory structure:
+For non-NN models,
+figures/{model}/
+For NN models,
+figures/nn/{optimizer}_corruption{rate}/ 
 
 Angie McGraw
-Last updated: March 31st, 2026
+Last updated: April 5th, 2026
 """
 
 import numpy as np
@@ -52,21 +64,40 @@ logging.basicConfig(level=logging.INFO)
 torch.set_num_threads(1)
 
 # Set number of runs per complexity
-#N_RUNS = 20     # each complexity is an average of N_RUNS independent trainings
-N_RUNS = 3     # for initial runs
+N_RUNS = 20     # each complexity is an average of N_RUNS independent trainings
+#N_RUNS = 3     # for initial runs
 
 def set_seed(seed):
     np.random.seed(seed)
     torch.manual_seed(seed)
 
 def get_model(model_name, complexity, input_dim, n_samples, optimizer="adam"):
+    """
+    Initialize a model for a given complexity level.
+
+    For the NN, complexity = number of hidden units in the single hidden layer.
+    The interpolation threshold occurs at approximately: critical_hidden = n_samples // (input_dim + 2)
+    which corresponds to params ~ n_samples.
+
+    Args:
+        model_name: str
+            options: "nn", "polynomial", "randomfeature", "kernelridge"
+        complexity: int
+            model complexity
+        input_dim: int
+            number of input features
+        n_samples: int
+            number of training samples
+        optimizer: str
+            options (for nn only): "adam" or "sgd"
+    """
     if model_name == "nn":
         lr = 1e-3 if optimizer == "adam" else 0.01
         return NeuralNetwork(
             input_dim=input_dim,
             complexity=complexity,
-            #epochs=10000,
-            epochs=3000,     # for initial runs
+            epochs=10000,
+            #epochs=3000,     # for initial runs
             lr=lr,
             optimizer=optimizer
         )
@@ -86,32 +117,29 @@ of training samples. We want high resolution here to be able to capture that.
 """
 def get_complexities(model_name, input_dim, n_samples):
     """
-    Complexity grids.
+    Returns the complexity grid for a given model and dataset.
+
+    For the NN, complexity = number of hidden units in the single hidden layer. 
+    The grid is constructed with fine resolution around the interpolation 
+    threshold (critical_hidden), where the double descent peak is expected.
+
+        Parameter count for a single hidden layer MLP: 
+            total_params = hidden * (input_dim + 2) + 1
+            where: 
+                input_dim * hidden = input-to-hidden weights
+                hidden = hidden biases
+                hidden * 1 = hidden-to-output weights
+                1 = output bias
+
+        Interpolation threshold occurs when total_params ~ n_samples.
+        Solving for hidden gives the critcal point: 
+            critical_hidden = n_samples // (input_dim + 2)
+
+        e.g. Friedman1: critical_hidden = 500 // 12 = 41, total_params ~ 505
+             Friedman2: critical_hidden = 500 // 6 = 83, total_params ~ 499
     """
     if model_name == "nn":
-        """
-        return (
-            list(range(1, 21)) +
-            list(range(21, 50, 2)) + 
-            list(range(50, 100, 5)) +
-            list(range(100, 400, 20))
-        )
-        """
-
-        # Approximate total params: input_dim * hidden + hidden + hidden*1 + 1 = hidden*(input_dim + 2) + 1
-        # Solve hidden ~ n_samples / (input_dim + 2) for critical point
         critical_hidden = max(1, n_samples // (input_dim + 2))
-
-        # Fine steps around critical point
-        """
-        small = list(range(1, critical_hidden + 10))
-        medium = list(range(critical_hidden + 10, critical_hidden * 2, 2))
-        large = list(range(critical_hidden * 2, 400, 20))
-        """
-        """
-        With critical_hidden=42, this tops out at h=390, which is params=390*12+1 = 4681
-        This is where the plot cuts off and the curve is still descending.
-        """
         small = list(range(1, critical_hidden + 20))
         medium = list(range(critical_hidden, critical_hidden * 2, 1))
         large = list(range(critical_hidden * 2, 400, 10))    
@@ -126,13 +154,20 @@ def get_complexities(model_name, input_dim, n_samples):
         raise ValueError(f"Unknown model: {model_name}.")
 
 def count_params(model):
-    # Only N has a .model attribute with parameters
+    """
+    Count trainable parameters. 
+    """
     if hasattr(model, "model"):
         return sum(p.numel() for p in model.model.parameters())
     else: 
         return np.nan
 
 def extract_hyperparameters(model_name, complexity, model):
+    """
+    Extract hyperparameters from a fitted model for logging to CSV.
+    If the field is not applicable to the given model, the field is 
+    set as np.nan.
+    """
     if model_name == "nn":
         return {
             "learning_rate": getattr(model, "lr", np.nan),
@@ -182,14 +217,40 @@ def extract_hyperparameters(model_name, complexity, model):
 def run_seed(seed, complexity, X_train, y_train, X_test, y_test, model_name,
             optimizer="adam", corruption=0.15):
     """
-    Add label noise to training set only (Nakkiran et al.) to create the 
-    conditions where the interpolation threshold produces a sharp peak. 
-    Without noise, Adam finds smooth minima that generalize reasonably well
-    everywhere.
+    Train one model at a given complexity and seed, return train/test MSE.
 
-    Nakkiran et al. Randomly replace 15% of training labels with values 
-    drawn from the training label distribution. This causes the interpolation
-    threshold peak without raising the noise floor as much as Gaussian noise does.
+    Label corruption (Nakkiran et al., 2019), applicable to NN implementation
+        Add label noise to training set only (Nakkiran et al.) - test 
+        labels remain clean throughout. 
+        
+        What it does: Randomly replace 15% of training labels with values 
+        drawn from the training label distribution. 
+        
+        This causes the interpolation threshold peak without raising the noise 
+        floor as much as Gaussian noise does. 
+
+        Without label corruption, Adam finds smooth minima that generalize
+        resonably well everwhere, so the peak gets suppressed.
+
+    Args:
+        seed: int
+            random seed (unique per run and per complexity)
+        complexity: int
+            model complexity
+        X_train: array
+            training features
+        y_train: array
+            training labels (clean)
+        X_test: array
+            test features
+        y_test: array
+            test labels (clean)
+        model_name: str
+            model identifier
+        optimizer: str
+            "adam" or "sgd" (just for NN)
+        corruption: float
+            label corruption rate (just for NN, 0.0 = no corruption)
     """
     set_seed(seed)
 
@@ -243,9 +304,9 @@ def main():
     # Load dataset
     X_train, X_test, y_train, y_test = load_dataset(dataset_name)
 
-    #complexities = get_complexities(model_name, X_train.shape[1], X_train.shape[0])
+    complexities = get_complexities(model_name, X_train.shape[1], X_train.shape[0])
     # For initial runs
-    complexities = sorted(set(list(range(1, 62)) + list(range(42, 85)) + list(range(85, 400, 10))))
+    #complexities = sorted(set(list(range(1, 62)) + list(range(42, 85)) + list(range(85, 400, 10))))
 
     # Prepare summary dictionary
     summary_data = {k: [] for k in [
