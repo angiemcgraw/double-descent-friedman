@@ -52,30 +52,24 @@ logging.basicConfig(level=logging.INFO)
 torch.set_num_threads(1)
 
 # Set number of runs per complexity
-N_RUNS = 20     # each complexity is an average of N_RUNS independent trainings
+#N_RUNS = 20     # each complexity is an average of N_RUNS independent trainings
+N_RUNS = 3     # for initial runs
 
 def set_seed(seed):
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-def get_model(model_name, complexity, input_dim, n_samples):
+def get_model(model_name, complexity, input_dim, n_samples, optimizer="adam"):
     if model_name == "nn":
-        # Adam lr
+        lr = 1e-3 if optimizer == "adam" else 0.01
         return NeuralNetwork(
             input_dim=input_dim,
             complexity=complexity,
-            epochs=10000,
-            lr=1e-3
+            #epochs=10000,
+            epochs=3000,     # for initial runs
+            lr=lr,
+            optimizer=optimizer
         )
-        """
-        # SGD lr
-        # Used in: /sgd_with_momentum_label_corruption runs
-        return NeuralNetwork(
-            input_dim=input_dim, 
-            complexity=complexity, 
-            epochs=10000,   
-            lr=0.01)
-        """
     #elif model_name == "polynomial:
         #return PolynomialRegression(degree=complexity)
     #elif model_name == "randomfeature":
@@ -185,7 +179,8 @@ def extract_hyperparameters(model_name, complexity, model):
             "n_features": np.nan
         }
 
-def run_seed(seed, complexity, X_train, y_train, X_test, y_test, model_name):
+def run_seed(seed, complexity, X_train, y_train, X_test, y_test, model_name,
+            optimizer="adam", corruption=0.15):
     """
     Add label noise to training set only (Nakkiran et al.) to create the 
     conditions where the interpolation threshold produces a sharp peak. 
@@ -198,24 +193,18 @@ def run_seed(seed, complexity, X_train, y_train, X_test, y_test, model_name):
     """
     set_seed(seed)
 
-    """
-    # No label corruption - Adam run, relies on dataset noise only
-    label_corruption = 0.0
-    y_train_noisy = y_train.copy()
-    """
-
     # NN-specific label corruption (Nakkiran et al.)
     label_corruption = 0.0
     y_train_noisy = y_train.copy()
 
-    if model_name == "nn":
-        # Corrupt 15% of labels randomly (helps with producing the interpolation peak)
+    if model_name == "nn" and corruption > 0:
+        # Corrupt n% of labels randomly (helps with producing the interpolation peak)
         n = len(y_train)
-        label_corruption = 0.15
+        label_corruption = corruption
         corrupt_idx = np.random.choice(n, size=int(label_corruption * n), replace=False)
         y_train_noisy[corrupt_idx] = np.random.choice(y_train, size=len(corrupt_idx))    
 
-    model = get_model(model_name, complexity, X_train.shape[1], X_train.shape[0])
+    model = get_model(model_name, complexity, X_train.shape[1], X_train.shape[0], optimizer)
     model.fit(X_train, y_train_noisy)
 
     y_train_pred = model.predict(X_train)
@@ -240,6 +229,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True, choices=["nn", "polynomial", "randomfeature", "kernelridge"])
     parser.add_argument("--dataset", required=True, choices=["friedman1", "friedman2", "friedman3"])
+    # NN-specific
+    parser.add_argument("--optimizer", choices=["adam", "sgd"], default="adam",
+                        help="Optimizer for nn model only.")
+    parser.add_argument("--corruption", type=float, default=0.15,
+                        help="Label corruption rate for nn model only (0.0 = no corruption).")
     args = parser.parse_args()
     
     model_name = args.model
@@ -249,7 +243,9 @@ def main():
     # Load dataset
     X_train, X_test, y_train, y_test = load_dataset(dataset_name)
 
-    complexities = get_complexities(model_name, X_train.shape[1], X_train.shape[0])
+    #complexities = get_complexities(model_name, X_train.shape[1], X_train.shape[0])
+    # For initial runs
+    complexities = sorted(set(list(range(1, 62)) + list(range(42, 85)) + list(range(85, 400, 10))))
 
     # Prepare summary dictionary
     summary_data = {k: [] for k in [
@@ -279,7 +275,9 @@ def main():
                     c,
                     X_train, y_train,
                     X_test, y_test,
-                    model_name
+                    model_name,
+                    args.optimizer,
+                    args.corruption
                 )
                 for run in range(N_RUNS)
             )
@@ -314,7 +312,8 @@ def main():
     print(f"Min test error: {min(summary_data['test_mse_mean']):.4f}")
 
     # Save summary CSV
-    model_dir = os.path.join("figures", model_name)
+    condition = f"{args.optimizer}_corruption{args.corruption}" if model_name == "nn" else ""
+    model_dir = os.path.join("figures", model_name, condition) if condition else os.path.join("figures", model_name)
     os.makedirs(model_dir, exist_ok=True)
     summary_csv = os.path.join(model_dir, f"{dataset_name}_metrics_summary.csv")
     pd.DataFrame(summary_data).to_csv(summary_csv, index=False)
@@ -332,7 +331,7 @@ def main():
         summary_data["test_mse_mean"],
         param_counts=summary_data["params_mean"],
         model_name=f"{model_name}_{dataset_name}",
-        filename=os.path.join(model_name, f"{dataset_name}_double_descent.png"),
+        filename=os.path.join(model_dir.replace("figures/", ""), f"{dataset_name}_double_descent.png"),
         threshold=X_train.shape[0]
     )
 

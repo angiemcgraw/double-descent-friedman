@@ -31,17 +31,16 @@ from torch import  nn
 from models.base_model import BaseModel
 
 class NeuralNetwork(BaseModel):
-    def __init__(self, input_dim, complexity=10, lr=0.01, epochs=200, n_layers=1):
+    def __init__(self, input_dim, complexity=10, lr=0.01, epochs=200, 
+                 n_layers=1, optimizer="adam"):
         """
         input_dim: number of input features
         complexity: number of hidden units per layer
         n_layers: number of hidden layers (default = 1)
-
-        - SGD with momentum=0.9, not Adam - Adam's adaptive LR suppresses the peak
         - ReLU activation 
         - He init - for ReLU
-        - epochs=200 with cosine LR schedule - trains to near-zero loss
-        - label noise added in run_seed
+        - Full-batch gradient descent
+        - Label corruption handled in run_seed
         """
         super().__init__(complexity)
         
@@ -70,34 +69,16 @@ class NeuralNetwork(BaseModel):
 
         self.loss_fn = nn.MSELoss()
 
-        # Adam optimizer
-        self.optimizer = torch.optim.Adam(
-            self.model.parameters(),
-            lr=self.lr
-        )
-
-        """
-        # SGD with momentum
-        # Used in: /sgd_with_momentum_label_corruption runs (noise = 0.1, 15% label corruption)
-        self.optimizer = torch.optim.SGD(
-            self.model.parameters(),
-            lr=self.lr,
-            momentum=0.9,
-            weight_decay=0.0     # no explicit regularization
-        )
-        """
-
-        """
-        # Cosine annealing - smoothly reduces lr to near zero
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=self.epochs
-        )
-        """
-        """
-        self.scheduler = torch.optim.lr_scheduler.StepLR(
-            self.optimizer, step_size=500, gamma=0.5
-        )
-        """
+        # Optimizer selection
+        if optimizer == "adam":
+            self.optimizer = torch.optim.Adam(
+                self.model.parameters(), lr=self.lr
+            )
+        elif optimizer == "sgd":
+            self.optimizer = torch.optim.SGD(
+                self.model.parameters(), lr=self.lr,
+                momentum=0.9, weight_decay=0.0
+            )
 
     def fit(self, X, y):
         self.model.train()
@@ -111,9 +92,6 @@ class NeuralNetwork(BaseModel):
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-            """
-            self.scheduler.step()
-            """
             
         # Diagnostic
         with torch.no_grad():

@@ -161,9 +161,16 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", required=True, choices=["friedman1", "friedman2", "friedman3"])
     parser.add_argument("--linear", action="store_true", help="Use linear y-axis instead of log.")
     parser.add_argument("--annotated", action="store_true", help="Produce annotated version,")
+    # NN specific
+    parser.add_argument("--condition", type=str, default=None,
+                        help="Subdirectory condition e.g. adam_corruption0.15")
     args = parser.parse_args()
 
-    csv_path = f"figures/{args.model}/{args.dataset}_metrics_summary.csv"
+    if args.condition:
+        csv_path = f"figures/{args.model}/{args.condition}/{args.dataset}_metrics_summary.csv"
+    else:
+        csv_path = f"figures/{args.model}/{args.dataset}_metrics_summary.csv"
+        
     model_name = f"{args.model}_{args.dataset}"
 
     if args.annotated:
