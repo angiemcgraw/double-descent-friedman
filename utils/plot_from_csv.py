@@ -1,7 +1,7 @@
 """
 Reads from a pre-generated metrics_summary.csv (the run.py will produce this).
 Produces the double descent plot. Options:
-- Default: log-scale y-axis
+- Default: log-scale y-axis, log-scale x-axis
 - Linear-scale y-axis
 - Has conditional arguments for the NN, i.e. the Adam vs SGD
 
@@ -107,7 +107,8 @@ def plot_from_csv(csv_path, model_name, log_scale=True):
     plt.title(f"Double descent: {model_name}")
     plt.gca().spines['top'].set_visible(False)
     plt.gca().spines['right'].set_visible(False)
-    plt.xlabel("Number of parameters")
+    plt.xscale('log')
+    plt.xlabel("Number of parameters (log scale)")
     plt.grid(False)
     plt.legend(loc='upper right', fontsize=7, frameon=False)
     plt.tight_layout()

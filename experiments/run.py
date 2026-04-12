@@ -65,9 +65,7 @@ logging.basicConfig(level=logging.INFO)
 torch.set_num_threads(1)
 
 # Set number of runs per complexity
-#N_RUNS = 20     # each complexity is an average of N_RUNS independent trainings
-#N_RUNS = 5
-N_RUNS = 3
+N_RUNS = 20     # each complexity is an average of N_RUNS independent trainings
 
 def set_seed(seed):
     np.random.seed(seed)
@@ -309,7 +307,6 @@ def main():
     X_train, X_test, y_train, y_test = load_dataset(dataset_name)
 
     complexities = get_complexities(model_name, X_train.shape[1], X_train.shape[0])
-    #complexities = [1, 2, 3, 5, 7, 10, 15, 20, 30, 42, 50, 60, 75, 100, 150, 200, 300, 400]
 
     # Prepare summary dictionary
     summary_data = {k: [] for k in [
@@ -376,11 +373,6 @@ def main():
     print(f"Min test error: {min(summary_data['test_mse_mean']):.4f}")
 
     # Save summary CSV
-    """
-    condition = f"{args.optimizer}_corruption{args.corruption}" if model_name == "nn" else ""
-    model_dir = os.path.join("figures", model_name, condition) if condition else os.path.join("figures", model_name)
-    os.makedirs(model_dir, exist_ok=True)
-    """
     if args.output_dir:
         model_dir = args.output_dir
     else:
