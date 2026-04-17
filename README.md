@@ -63,3 +63,11 @@ print(sys.executable)
 import torch, sklearn, numpy
 print(torch.__version__, sklearn.__version__)
 ```
+
+After the conda environment has been activated, please run the following:
+```bash
+pip3 install "numpy<2"
+pip3 install tqdm
+pip3 install tqdm-joblib
+pip3 intall --upgrade gmpy2
+```
