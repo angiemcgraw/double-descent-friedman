@@ -56,7 +56,7 @@ from utils.plotting import plot_double_descent
 
 # Import models
 #from models.polynomial import PolynomialRegression
-#from models.randomfeature import RandomFeatureRegression
+from models.random_feature import RandomFeatureRegression
 #from models.kernelridge import KernelRidgeRegression
 from models.neural_network import NeuralNetwork
 
@@ -103,8 +103,8 @@ def get_model(model_name, complexity, input_dim, n_samples, optimizer="adam"):
         )
     #elif model_name == "polynomial:
         #return PolynomialRegression(degree=complexity)
-    #elif model_name == "randomfeature":
-        #return RandomFeatureRegresssion(n_features=complexity)
+    elif model_name == "randomfeature":
+        return RandomFeatureRegression(input_dim=input_dim, complexity=complexity)
     #elif model_name == "kernelridge":
         #alpha = 10 ** (-complexity / 10)
         #reutrn KernelRidgeRegression(alpha=alpha)
@@ -148,7 +148,12 @@ def get_complexities(model_name, input_dim, n_samples):
         
     #elif model_name == "polynomial:
         #return list(range(1, 30))
-    #elif model_name == "randomfeature":
+    elif model_name == "randomfeature":
+        critical_kernel = max(1, n_samples // 2)
+        small = list(range(1, critical_kernel + 20))
+        medium = list(range(critical_kernel, critical_kernel * 2, 1))
+        large = list(range(critical_kernel * 2, 400, 10))
+        return sorted(set(small + medium + large))
     #elif model_name == "kernelridge":
     else:
         raise ValueError(f"Unknown model: {model_name}.")
