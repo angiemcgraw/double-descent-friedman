@@ -16,6 +16,7 @@ Usage (from the base directory: /double-descent-friedman)
 python3 -m experiments.run --model nn --dataset friedman1
 python3 -m experiments.run --model nn --dataset friedman1 --optimizer adam --corruption 0.15
 python3 -m experiments.run --model polynomial --dataset friedman1
+python3 -m experiments.run --model nn --dataset friedman1 --output-dir adam_corruption0.15
 
 Models supported:
 1. Polynomial Regression (polynomial)
@@ -65,7 +66,6 @@ torch.set_num_threads(1)
 
 # Set number of runs per complexity
 N_RUNS = 20     # each complexity is an average of N_RUNS independent trainings
-#N_RUNS = 3     # for initial runs
 
 def set_seed(seed):
     np.random.seed(seed)
@@ -295,10 +295,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True, choices=["nn", "polynomial", "randomfeature", "kernelridge"])
     parser.add_argument("--dataset", required=True, choices=["friedman1", "friedman2", "friedman3"])
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="Override output directory. Defaults to figures/{model}/")
     # NN-specific
     parser.add_argument("--optimizer", choices=["adam", "sgd"], default="adam",
                         help="Optimizer for nn model only.")
-    parser.add_argument("--corruption", type=float, default=0.15,
+    parser.add_argument("--corruption", type=float, default=0.00,
                         help="Label corruption rate for nn model only (0.0 = no corruption).")
     args = parser.parse_args()
     
@@ -310,8 +312,6 @@ def main():
     X_train, X_test, y_train, y_test = load_dataset(dataset_name)
 
     complexities = get_complexities(model_name, X_train.shape[1], X_train.shape[0])
-    # For initial runs
-    #complexities = sorted(set(list(range(1, 62)) + list(range(42, 85)) + list(range(85, 400, 10))))
 
     # Prepare summary dictionary
     summary_data = {k: [] for k in [
@@ -378,8 +378,10 @@ def main():
     print(f"Min test error: {min(summary_data['test_mse_mean']):.4f}")
 
     # Save summary CSV
-    condition = f"{args.optimizer}_corruption{args.corruption}" if model_name == "nn" else ""
-    model_dir = os.path.join("figures", model_name, condition) if condition else os.path.join("figures", model_name)
+    if args.output_dir:
+        model_dir = args.output_dir
+    else:
+        model_dir = os.path.join("figures", model_name)
     os.makedirs(model_dir, exist_ok=True)
     summary_csv = os.path.join(model_dir, f"{dataset_name}_metrics_summary.csv")
     pd.DataFrame(summary_data).to_csv(summary_csv, index=False)
