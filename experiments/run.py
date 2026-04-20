@@ -58,7 +58,7 @@ from utils.plotting import plot_double_descent
 # Import models
 #from models.polynomial import PolynomialRegression
 from models.random_feature import RandomFeatureRegression
-#from models.kernelridge import KernelRidgeRegression
+from models.kernel_ridge import KernelRidgeRegression
 from models.neural_network import NeuralNetwork
 
 logging.basicConfig(level=logging.INFO)
@@ -105,9 +105,9 @@ def get_model(model_name, complexity, input_dim, n_samples, optimizer="adam"):
         #return PolynomialRegression(degree=complexity)
     elif model_name == "randomfeature":
         return RandomFeatureRegression(input_dim=input_dim, complexity=complexity)
-    #elif model_name == "kernelridge":
-        #alpha = 10 ** (-complexity / 10)
-        #reutrn KernelRidgeRegression(alpha=alpha)
+    elif model_name == "kernelridge":
+        alpha = 10 ** (-complexity / 10)
+        reutrn KernelRidgeRegression(alpha=alpha)
     else:
         raise ValueError(f"Unknown model: {model_name}.")
 
@@ -154,7 +154,14 @@ def get_complexities(model_name, input_dim, n_samples):
         medium = list(range(critical_kernel, critical_kernel * 2, 1))
         large = list(range(critical_kernel * 2, 400, 10))
         return sorted(set(small + medium + large))
-    #elif model_name == "kernelridge":
+    elif model_name == "kernelridge":
+        # alpha = 10^(-c / 10), so c = 10 -> alpha = 0.1; c = 30 -> alpha = 1e-3
+        # etc. Fine resolution in the range where alpha passes through the
+        # interpolation threshold (roughly c = 20 .. 50, for n = 500 samples)
+        coarse = list(range(1 , 20   ))
+        fine   = list(range(20, 55   ))
+        beyond = list(range(55, 80, 2))
+        return sorted(set(coarse + fine + beyond))
     else:
         raise ValueError(f"Unknown model: {model_name}.")
 
@@ -205,7 +212,7 @@ def extract_hyperparameters(model_name, complexity, model):
             "learning_rate": np.nan,
             "batch_size": np.nan,
             "epochs": np.nan,
-            "alpha": np.nan,
+            "alpha": getattr(model, "alpha", np.nan),
             "degree": np.nan,
             "n_features": np.nan
         }
@@ -263,7 +270,7 @@ def run_seed(seed, complexity, X_train, y_train, X_test, y_test, model_name,
     label_corruption = 0.0
     y_train_noisy = y_train.copy()
 
-    if model_name == "nn" and corruption > 0:
+    if model_name in ("nn", "kernelridge") and corruption > 0:
         # Corrupt n% of labels randomly (helps with producing the interpolation peak)
         n = len(y_train)
         label_corruption = corruption
@@ -290,6 +297,73 @@ def run_seed(seed, complexity, X_train, y_train, X_test, y_test, model_name,
         "label_corruption": label_corruption,
         **hyperparams
     }
+
+# ── KRR-specific plotting ─────────────────────────────────────────────
+def plot_krr_alpha(summary_data, dataset_name, model_dir):
+    """
+    Plot KRR results with alpha on a log-scale x-axis (inverted so
+    complexity increases left-to-right), std bands, and optimal-alpha
+    annotation. Saved alongside the default complexity plot.
+    """
+    import matplotlib.pyplot as plt
+
+    df = pd.DataFrame(summary_data)
+    df["alpha"] = 10.0 ** (-df["complexity"] / 10.0)
+    df = df.sort_values("alpha", ascending=False).reset_index(drop=True)
+
+    # Filter non-finite rows (numerical blowup at tiny alpha)
+    valid = np.isfinite(df["test_mse_mean"]) & np.isfinite(df["train_mse_mean"])
+    df = df[valid].copy()
+
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+
+    ax.plot(df["alpha"], df["train_mse_mean"],
+            lw=2.2, color="#2563EB", label="Train MSE", zorder=3)
+    ax.plot(df["alpha"], df["test_mse_mean"],
+            lw=2.2, color="#EA580C", label="Test MSE", zorder=3)
+
+    # Std bands
+    ax.fill_between(df["alpha"],
+                    (df["train_mse_mean"] - df["train_mse_std"]).clip(lower=1e-10),
+                    df["train_mse_mean"] + df["train_mse_std"],
+                    color="#2563EB", alpha=0.12)
+    ax.fill_between(df["alpha"],
+                    (df["test_mse_mean"] - df["test_mse_std"]).clip(lower=1e-10),
+                    df["test_mse_mean"] + df["test_mse_std"],
+                    color="#EA580C", alpha=0.12)
+
+    # Optimal alpha marker
+    best_idx = df["test_mse_mean"].idxmin()
+    best_alpha = df.loc[best_idx, "alpha"]
+    best_test  = df.loc[best_idx, "test_mse_mean"]
+    ax.axvline(best_alpha, color="gray", ls="--", lw=1.0, alpha=0.5)
+    ax.plot(best_alpha, best_test, "o", color="#EA580C", ms=7, zorder=5)
+    ax.annotate(
+        f"Optimal α ≈ {best_alpha:.2e}\nTest MSE ≈ {best_test:.4f}",
+        xy=(best_alpha, best_test),
+        xytext=(best_alpha * 50, best_test * 3),
+        fontsize=9, color="gray",
+        arrowprops=dict(arrowstyle="->", color="gray", lw=1.2),
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.invert_xaxis()
+    ax.set_xlabel("Regularization α  (← more complex       simpler →)", fontsize=12)
+    ax.set_ylabel("MSE (log scale)", fontsize=12)
+    ax.set_title(
+        f"Kernel Ridge Regression on {dataset_name}\n"
+        f"Classical Bias–Variance Tradeoff (No Double Descent)",
+        fontsize=13, fontweight="bold")
+    ax.legend(fontsize=11, loc="lower left", framealpha=0.9)
+    ax.grid(True, which="both", alpha=0.25)
+    ax.tick_params(labelsize=10)
+
+    plt.tight_layout()
+    outpath = os.path.join(model_dir, f"{dataset_name}_alpha_curve.png")
+    plt.savefig(outpath, dpi=200, bbox_inches="tight")
+    plt.close()
+    print(f"[INFO] KRR alpha plot saved to {outpath}.")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -374,7 +448,8 @@ def main():
     # ---------------------------------------------------------------
 
     # Check
-    print(f"Min train error: {min(summary_data['train_mse_mean']):.4f}")     # we expect this to be close to 0 for large models
+    print(f"Min train error: {min(summary_data['train_mse_mean']):.4f}")
+    # we expect this to be close to 0 for large models
     print(f"Min test error: {min(summary_data['test_mse_mean']):.4f}")
 
     # Save summary CSV
@@ -402,6 +477,11 @@ def main():
         filename=os.path.join(model_dir.replace("figures/", ""), f"{dataset_name}_double_descent.png"),
         threshold=X_train.shape[0]
     )
+
+    # KRR-specific: alpha on log x-axis with std bands
+    if model_name == "kernelridge":
+        plot_krr_alpha(summary_data, dataset_name, model_dir)
+
 
 if __name__ == "__main__":
     main()
