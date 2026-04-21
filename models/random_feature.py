@@ -22,13 +22,14 @@ class RandomFeatureRegression(BaseModel):
         self.input_dim = input_dim
         
         # Kernel regressor with random Fourier features.
-        self.reg = rfflearn.RFFRegressor(dim_kernel=self.input_dim, std_kernel=1.0)
+        self.reg = rfflearn.RFFRegressor(dim_kernel=self.complexity, std_kernel=0.5)
 
         # Kernel regressor with orthogonal random features.
         # reg = rfflearn.ORFRegressor(dim_kernel=self.input_dim, std_kernel=5.0)
 
         # Kernel regressor with quasi-random Fourier features.
         # reg = rfflearn.QRFRegressor(dim_kernel=self.input_dim, std_kernel=5.0)
+        #self.reg = rfflearn.RFFGPR(dim_kernel=self.complexity, std_kernel=5.0, std_error=1.0)
 
 
     def fit(self, X, y):

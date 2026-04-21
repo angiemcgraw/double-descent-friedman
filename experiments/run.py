@@ -171,6 +171,9 @@ def count_params(model):
     """
     if hasattr(model, "model"):
         return sum(p.numel() for p in model.model.parameters())
+    elif hasattr(model, "reg"):
+        # For random feature regression, the number of parameters is approximately 2 * complexity + 1 (weights and biases)
+        return 2 * model.complexity + 1
     else: 
         return np.nan
 

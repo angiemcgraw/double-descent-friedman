@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 
-FIGURE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "figures")
+FIGURE_DIR = os.path.dirname(os.path.dirname(__file__))
 #FIGURE_DIR = "../figures"
 os.makedirs(FIGURE_DIR, exist_ok=True)
 
@@ -51,7 +51,7 @@ def plot_double_descent(complexities, train_errors, test_errors,
     plt.figure(figsize=(8,4))
 
     x = param_counts if param_counts is not None else complexities
-    xlabel = "Number of Parameters" if param_counts is not None else "Model Complexity"
+    xlabel = "Number of Parameters (log scale)" if param_counts is not None else "Model Complexity"
 
     x = np.array(x)
     train_errors = np.array(train_errors)
@@ -84,10 +84,11 @@ def plot_double_descent(complexities, train_errors, test_errors,
         plt.axvline(x=threshold, color='gray', linestyle='--',
                     alpha=0.6, label=f"Interpolation threshold ({threshold})")
 
-    plt.yscale('log')
+    plt.xscale('log')
+    #plt.yscale('log')
     plt.title(f"Double Descent: {model_name}")
     plt.xlabel(xlabel)
-    plt.ylabel("MSE (log scale)")
+    plt.ylabel("MSE")
     plt.grid(True, which='both', alpha=0.3)
     plt.legend()
     plt.tight_layout()
@@ -96,7 +97,14 @@ def plot_double_descent(complexities, train_errors, test_errors,
         filename = f"{model_name}_double_descent.png"
         
     save_path = os.path.join(FIGURE_DIR, filename)
-    plt.savefig(save_path, dpi=300)
+    print(save_path)
+    try:
+        os.makedirs(FIGURE_DIR, exist_ok=True)
+        plt.savefig(save_path, dpi=300)
+        print(f"Successfully saved to: {save_path}")
+    except Exception as e:
+        print(f"Original save failed: {e}")
+    #plt.savefig(save_path, dpi=300)
     plt.close()
     
     print(f"[INFO] Figure saved to {save_path}.")
